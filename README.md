@@ -61,11 +61,10 @@ Your chat UI (src/)          BrenoxClient + @brenox/react
 ## Build & deploy
 
 ```bash
-npm run build
-npm run sync:web-static   # copies dist/ into brenox-web/public/demos/chat
+npm run build   # outputs dist/
 ```
 
-The embed API must run on your backend in production — the static UI alone is not enough for the Alice/Bob launcher.
+Host `dist/` on your own domain (static hosting) and deploy the embed API (`server/index.mjs`) on your backend — it holds the API key and issues session tokens. The static UI alone is not enough for the Alice/Bob launcher.
 
 ## Troubleshooting
 

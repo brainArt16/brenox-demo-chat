@@ -8,8 +8,7 @@
     "dev:server": "node --env-file=.env server/index.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview",
-    "sync:web-static": "npm run build && node scripts/sync-web-static.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@brenox/react": "^0.1.2",
