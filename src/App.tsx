@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import type { ConnectionState, UserProfile } from "@brenox/sdk";
 import { BrenoxProvider, useBrenoxClient } from "@brenox/react";
 import { brenoxClient } from "./brenox/client";
+import { CallPanel } from "./components/CallPanel";
 import { ChatPanel } from "./components/ChatPanel";
 import { EmbedLauncher } from "./components/EmbedLauncher";
 import { EmbedRoomBar } from "./components/EmbedRoomBar";
 import { Header } from "./components/Header";
 import { NotificationsPanel } from "./components/NotificationsPanel";
+import { ChannelSessionProvider } from "./context/channel-session";
 import { formatError, isAuthFailure } from "./utils/errors";
 
 interface EmbedSession {
@@ -146,12 +148,18 @@ function DemoApp() {
         />
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <ChatPanel
+          <ChannelSessionProvider
             workspaceId={embedSession.workspaceId}
             channelId={embedSession.channelId}
-            currentUserId={user.id}
-            onConnectionStateChange={setConnectionState}
-          />
+          >
+            <CallPanel currentUserId={user.id} />
+            <ChatPanel
+              workspaceId={embedSession.workspaceId}
+              channelId={embedSession.channelId}
+              currentUserId={user.id}
+              onConnectionStateChange={setConnectionState}
+            />
+          </ChannelSessionProvider>
         </main>
 
         <NotificationsPanel />

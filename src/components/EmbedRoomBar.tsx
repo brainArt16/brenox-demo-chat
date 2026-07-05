@@ -25,11 +25,6 @@ export function EmbedRoomBar({
           ws {workspaceId} · ch {channelId}
         </p>
       </div>
-      <p className="text-xs leading-relaxed text-text-muted">
-        Your backend provisioned this user and issued a Brenox session token.
-        Chat, typing, and presence run over the Brenox SDK — no Brenox signup
-        screen for your users.
-      </p>
     </aside>
   );
 }

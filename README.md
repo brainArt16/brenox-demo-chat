@@ -24,6 +24,8 @@ npm run dev
 
 Open `http://localhost:5173/demos/chat/`. Click **Alice** in one browser tab and **Bob** in another to try realtime chat in `#general`.
 
+**Try a call:** Alice clicks **Start video** (or **Start voice**). Bob sees an incoming call banner and clicks **Join call**. Allow mic/camera when prompted.
+
 > **Two terminals required:** Vite (`npm run dev`) only serves the UI. The embed API (`npm run dev:server`) must stay running on port 3001 — if it stops, you'll see proxy/`ECONNREFUSED` errors when opening a user.
 
 ## Environment
@@ -35,6 +37,7 @@ Open `http://localhost:5173/demos/chat/`. Click **Alice** in one browser tab and
 | `VITE_BRENOX_API_URL` | Same URL for `BrenoxClient` in the browser |
 | `VITE_DEMO_API_URL` | Leave empty to use Vite proxy (`/api` → port 3001) |
 | `DEMO_SERVER_PORT` | Embed API port (default `3001`) |
+| `VITE_ICE_SERVERS` | Optional JSON array of STUN/TURN servers for WebRTC calls |
 
 ## Architecture
 
@@ -50,6 +53,7 @@ Your chat UI (src/)          BrenoxClient + @brenox/react
 
 - Embed session tokens (`POST /v1/sessions`)
 - Live chat (REST history + WebSocket)
+- Voice & video calls (`useCallSignaling` + WebRTC mesh)
 - Typing indicators and channel events
 - Notifications (`useNotifications`)
 - File attachments
@@ -62,6 +66,36 @@ npm run sync:web-static   # copies dist/ into brenox-web/public/demos/chat
 ```
 
 The embed API must run on your backend in production — the static UI alone is not enough for the Alice/Bob launcher.
+
+## Troubleshooting
+
+### `rate limit exceeded` (HTTP 429)
+
+The Brenox engine limits requests per IP (default 300/min) and per API key on `/v1/*` (default 120/min). The demo can hit this during development with two tabs open.
+
+**Fix for local engine** — add to `brenox-engine/.env` and restart the engine:
+
+```bash
+API_RATE_LIMIT_PER_MINUTE=1000
+HTTP_RATE_LIMIT_PER_IP=2000
+```
+
+Wait one minute for the current window to reset, then retry.
+
+### `WebSocket connection failed`
+
+The engine checks the browser **Origin** against `WS_ALLOWED_ORIGINS`. If you open the demo at `http://127.0.0.1:5173` but only `localhost` is allowed (or vice versa), the WebSocket upgrade is rejected.
+
+**Fix:** ensure `brenox-engine/.env` includes **both** hostname variants for port 5173:
+
+```bash
+WS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173
+```
+
+Restart the engine after editing. Use the same hostname in the URL bar that you configured (or allow both).
+
+If connections still fail after many hot-reloads, restart the engine to clear stale WebSocket connection counts (`WS_MAX_CONNECTIONS_PER_USER`).
 
 ## Links
 

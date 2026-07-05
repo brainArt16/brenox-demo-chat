@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Attachment, ChannelServerEventType, MessageListItem } from "@brenox/sdk";
-import { useBrenoxClient, useChannel } from "@brenox/react";
+import { useBrenoxClient } from "@brenox/react";
+import { useChannelSession } from "../context/channel-session";
 import { asArray } from "../utils/asArray";
 import { formatError } from "../utils/errors";
 
@@ -8,7 +9,7 @@ interface ChatPanelProps {
   workspaceId: number;
   channelId: number;
   currentUserId: number;
-  onConnectionStateChange?: (state: ReturnType<typeof useChannel>["connectionState"]) => void;
+  onConnectionStateChange?: (state: ReturnType<typeof useChannelSession>["connectionState"]) => void;
 }
 
 function toListItem(
@@ -59,10 +60,7 @@ export function ChatPanel({
   const {
     connection,
     connectionState,
-    connect,
-    startTyping,
-    stopTyping,
-  } = useChannel(workspaceId, channelId);
+  } = useChannelSession();
 
   const [messages, setMessages] = useState<MessageListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,14 +85,11 @@ export function ChatPanel({
   >({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<number | null>(null);
+  const loadedAttachmentIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     onConnectionStateChange?.(connectionState);
   }, [connectionState, onConnectionStateChange]);
-
-  useEffect(() => {
-    void connect();
-  }, [connect]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,10 +190,16 @@ export function ChatPanel({
   useEffect(() => {
     let cancelled = false;
 
+    const toFetch = visibleMessages.filter(
+      (message) => !loadedAttachmentIdsRef.current.has(message.id),
+    );
+    if (toFetch.length === 0) return;
+
     async function loadAttachments() {
       const map: Record<number, Attachment[]> = {};
       await Promise.all(
-        visibleMessages.map(async (message) => {
+        toFetch.map(async (message) => {
+          loadedAttachmentIdsRef.current.add(message.id);
           try {
             const items = await client.attachments.listByMessage(
               workspaceId,
@@ -213,14 +214,12 @@ export function ChatPanel({
           }
         }),
       );
-      if (!cancelled) {
-        setAttachmentsByMessage(map);
+      if (!cancelled && Object.keys(map).length > 0) {
+        setAttachmentsByMessage((prev) => ({ ...prev, ...map }));
       }
     }
 
-    if (visibleMessages.length > 0) {
-      void loadAttachments();
-    }
+    void loadAttachments();
 
     return () => {
       cancelled = true;
@@ -231,13 +230,13 @@ export function ChatPanel({
     setDraft(value);
     if (connectionState !== "connected") return;
 
-    startTyping();
+    connection?.startTyping();
     if (typingTimeoutRef.current !== null) {
       window.clearTimeout(typingTimeoutRef.current);
     }
     typingTimeoutRef.current = window.setTimeout(() => {
       if (connection?.connectionState === "connected") {
-        stopTyping();
+        connection.stopTyping();
       }
     }, 1500);
   }
@@ -250,7 +249,7 @@ export function ChatPanel({
     setSending(true);
     setSendError(null);
     if (connectionState === "connected") {
-      stopTyping();
+      connection?.stopTyping();
     }
 
     try {

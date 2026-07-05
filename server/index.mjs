@@ -31,6 +31,8 @@ const PERSONAS = {
 
 /** @type {{ workspaceId: number; channelId: number } | null} */
 let room = null;
+/** @type {Promise<{ workspaceId: number; channelId: number }> | null} */
+let roomPromise = null;
 
 async function loadPersistedRoom() {
   try {
@@ -61,27 +63,36 @@ async function persistRoom(nextRoom) {
 
 async function ensureRoom() {
   if (room) return room;
+  if (roomPromise) return roomPromise;
 
-  const persisted = await loadPersistedRoom();
-  if (persisted) {
-    room = persisted;
+  roomPromise = (async () => {
+    const persisted = await loadPersistedRoom();
+    if (persisted) {
+      room = persisted;
+      return room;
+    }
+
+    await server.users.provision(PERSONAS.alice);
+    await server.users.provision(PERSONAS.bob);
+
+    const channel = await server.channels.create(
+      { name: DEMO_CHANNEL_NAME },
+      `demo-channel-${DEMO_CHANNEL_NAME}`,
+    );
+
+    room = {
+      workspaceId: channel.workspace_id,
+      channelId: channel.id,
+    };
+    await persistRoom(room);
     return room;
+  })();
+
+  try {
+    return await roomPromise;
+  } finally {
+    roomPromise = null;
   }
-
-  await server.users.provision(PERSONAS.alice);
-  await server.users.provision(PERSONAS.bob);
-
-  const channel = await server.channels.create(
-    { name: DEMO_CHANNEL_NAME },
-    `demo-channel-${DEMO_CHANNEL_NAME}`,
-  );
-
-  room = {
-    workspaceId: channel.workspace_id,
-    channelId: channel.id,
-  };
-  await persistRoom(room);
-  return room;
 }
 
 function sendJson(res, status, body) {
@@ -164,4 +175,7 @@ const httpServer = http.createServer(async (req, res) => {
 httpServer.listen(PORT, () => {
   console.log(`Embed demo API listening on http://localhost:${PORT}`);
   console.log(`Brenox engine: ${baseUrl}`);
+  ensureRoom().catch((err) => {
+    console.error("Demo room bootstrap failed:", err);
+  });
 });

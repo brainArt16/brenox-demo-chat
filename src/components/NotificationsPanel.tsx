@@ -9,7 +9,7 @@ export function NotificationsPanel() {
     refresh,
     markRead,
     markAllRead,
-  } = useNotifications({ pollIntervalMs: 30_000 });
+  } = useNotifications({ pollIntervalMs: 60_000 });
 
   return (
     <aside className="flex w-full flex-col border-l border-border bg-surface lg:w-72">
@@ -78,7 +78,7 @@ export function NotificationsPanel() {
       </div>
 
       <p className="border-t border-border px-3 py-2 text-xs text-text-muted">
-        Polling every 30s via{" "}
+        Polling every 60s via{" "}
         <code className="rounded bg-surface-muted px-1">useNotifications</code>
       </p>
     </aside>
