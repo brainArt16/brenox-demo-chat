@@ -1,4 +1,7 @@
+import fs from "node:fs/promises";
 import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { BrenoxServer } from "@brenox/sdk/server";
 
 const PORT = Number(process.env.DEMO_SERVER_PORT ?? 3001);
@@ -6,6 +9,11 @@ const baseUrl = (
   process.env.BRENOX_API_URL ?? "http://localhost:8080"
 ).replace(/\/$/, "");
 const apiKey = process.env.BRENOX_API_KEY;
+const DEMO_CHANNEL_NAME = "general";
+const STATE_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  ".demo-room.json",
+);
 
 if (!apiKey) {
   console.error(
@@ -24,17 +32,55 @@ const PERSONAS = {
 /** @type {{ workspaceId: number; channelId: number } | null} */
 let room = null;
 
+async function loadPersistedRoom() {
+  try {
+    const raw = await fs.readFile(STATE_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed.workspaceId === "number" &&
+      typeof parsed.channelId === "number"
+    ) {
+      return {
+        workspaceId: parsed.workspaceId,
+        channelId: parsed.channelId,
+      };
+    }
+  } catch {
+    // No persisted room yet — bootstrap below.
+  }
+  return null;
+}
+
+async function persistRoom(nextRoom) {
+  await fs.writeFile(
+    STATE_FILE,
+    JSON.stringify(nextRoom, null, 2),
+    "utf8",
+  );
+}
+
 async function ensureRoom() {
   if (room) return room;
+
+  const persisted = await loadPersistedRoom();
+  if (persisted) {
+    room = persisted;
+    return room;
+  }
 
   await server.users.provision(PERSONAS.alice);
   await server.users.provision(PERSONAS.bob);
 
-  const channel = await server.channels.create({ name: "general" });
+  const channel = await server.channels.create(
+    { name: DEMO_CHANNEL_NAME },
+    `demo-channel-${DEMO_CHANNEL_NAME}`,
+  );
+
   room = {
     workspaceId: channel.workspace_id,
     channelId: channel.id,
   };
+  await persistRoom(room);
   return room;
 }
 
@@ -75,7 +121,7 @@ const httpServer = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         workspace_id: config.workspaceId,
         channel_id: config.channelId,
-        channel_name: "general",
+        channel_name: DEMO_CHANNEL_NAME,
         personas: Object.keys(PERSONAS),
       });
       return;

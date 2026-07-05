@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import {
   DEMO_PERSONAS,
+  DEMO_SERVER_HINT,
   createEmbedSession,
   fetchDemoConfig,
   type DemoConfig,
   type DemoPersona,
 } from "../lib/embed-api";
-import { formatError } from "../utils/errors";
 
 interface EmbedLauncherProps {
   onLaunch: (input: {
@@ -21,28 +21,27 @@ interface EmbedLauncherProps {
 
 export function EmbedLauncher({ onLaunch }: EmbedLauncherProps) {
   const [config, setConfig] = useState<DemoConfig | null>(null);
+  const [configLoading, setConfigLoading] = useState(true);
   const [loadingPersona, setLoadingPersona] = useState<DemoPersona["id"] | null>(
     null,
   );
   const [error, setError] = useState<string | null>(null);
 
+  async function loadConfig() {
+    setConfigLoading(true);
+    setError(null);
+    try {
+      setConfig(await fetchDemoConfig());
+    } catch (err: unknown) {
+      setConfig(null);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setConfigLoading(false);
+    }
+  }
+
   useEffect(() => {
-    let cancelled = false;
-    fetchDemoConfig()
-      .then((value) => {
-        if (!cancelled) setConfig(value);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(
-            formatError(err) +
-              " — is the embed demo server running? (npm run dev:server)",
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+    void loadConfig();
   }, []);
 
   async function handleOpen(persona: DemoPersona["id"]) {
@@ -59,7 +58,7 @@ export function EmbedLauncher({ onLaunch }: EmbedLauncherProps) {
         username: session.user.username,
       });
     } catch (err) {
-      setError(formatError(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadingPersona(null);
     }
@@ -79,6 +78,9 @@ export function EmbedLauncher({ onLaunch }: EmbedLauncherProps) {
           users with an API key and returns a session token. End users never
           register on Brenox directly — they open chat inside your app.
         </p>
+        {configLoading && (
+          <p className="mt-3 text-xs text-text-muted">Connecting to embed API…</p>
+        )}
         {config && (
           <p className="mt-3 text-xs text-text-muted">
             Demo room: <span className="font-mono">#{config.channel_name}</span>{" "}
@@ -92,7 +94,7 @@ export function EmbedLauncher({ onLaunch }: EmbedLauncherProps) {
           <button
             key={persona.id}
             type="button"
-            disabled={loadingPersona !== null}
+            disabled={loadingPersona !== null || configLoading}
             onClick={() => void handleOpen(persona.id)}
             className="rounded-lg border border-border bg-surface p-5 text-left transition hover:border-accent/40 hover:bg-surface-muted disabled:opacity-60"
           >
@@ -106,14 +108,26 @@ export function EmbedLauncher({ onLaunch }: EmbedLauncherProps) {
       </div>
 
       {error && (
-        <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
-          {error}
-        </p>
+        <div
+          className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger"
+          role="alert"
+        >
+          <p>{error}</p>
+          {error === DEMO_SERVER_HINT && (
+            <button
+              type="button"
+              onClick={() => void loadConfig()}
+              className="mt-2 rounded-md border border-danger/30 px-2 py-1 text-xs font-medium text-danger hover:bg-danger/5"
+            >
+              Retry connection
+            </button>
+          )}
+        </div>
       )}
 
       <p className="text-center text-xs text-text-muted">
-        Open Alice in one browser window and Bob in another (or incognito) to
-        try realtime chat.
+        Open Alice in one browser tab and Bob in another to try realtime chat.
+        Each tab keeps its own session.
       </p>
     </div>
   );

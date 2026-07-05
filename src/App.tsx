@@ -7,7 +7,7 @@ import { EmbedLauncher } from "./components/EmbedLauncher";
 import { EmbedRoomBar } from "./components/EmbedRoomBar";
 import { Header } from "./components/Header";
 import { NotificationsPanel } from "./components/NotificationsPanel";
-import { formatError } from "./utils/errors";
+import { formatError, isAuthFailure } from "./utils/errors";
 
 interface EmbedSession {
   personaLabel: string;
@@ -22,6 +22,7 @@ function DemoApp() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [embedSession, setEmbedSession] = useState<EmbedSession | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [launcherKey, setLauncherKey] = useState(0);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
 
@@ -40,7 +41,11 @@ function DemoApp() {
     } catch (err) {
       setUser(null);
       setEmbedSession(null);
-      setAuthError(formatError(err));
+      setAuthError(
+        isAuthFailure(err)
+          ? `Session expired. Pick a user below to start again. (${formatError(err)})`
+          : formatError(err),
+      );
       await client.auth.logout();
     } finally {
       setBootstrapping(false);
@@ -59,14 +64,26 @@ function DemoApp() {
     channelName: string;
     username: string;
   }) {
-    await client.setToken(input.token);
-    setEmbedSession({
-      personaLabel: input.username,
-      workspaceId: input.workspaceId,
-      channelId: input.channelId,
-      channelName: input.channelName,
-    });
-    await loadSession();
+    setAuthError(null);
+    setBootstrapping(true);
+    try {
+      await client.setToken(input.token);
+      const profile = await client.users.me();
+      setUser(profile);
+      setEmbedSession({
+        personaLabel: input.username,
+        workspaceId: input.workspaceId,
+        channelId: input.channelId,
+        channelName: input.channelName,
+      });
+    } catch (err) {
+      await client.auth.logout();
+      setUser(null);
+      setEmbedSession(null);
+      setAuthError(formatError(err));
+    } finally {
+      setBootstrapping(false);
+    }
   }
 
   async function handleSwitchUser() {
@@ -75,6 +92,7 @@ function DemoApp() {
     setEmbedSession(null);
     setConnectionState("disconnected");
     setAuthError(null);
+    setLauncherKey((value) => value + 1);
   }
 
   if (bootstrapping) {
@@ -96,10 +114,13 @@ function DemoApp() {
                 className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger"
                 role="alert"
               >
-                Previous session expired: {authError}
+                {authError}
               </p>
             )}
-            <EmbedLauncher onLaunch={(input) => void handleLaunch(input)} />
+            <EmbedLauncher
+              key={launcherKey}
+              onLaunch={(input) => void handleLaunch(input)}
+            />
           </div>
         </main>
       </div>

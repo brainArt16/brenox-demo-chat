@@ -22,7 +22,9 @@ npm run dev:server
 npm run dev
 ```
 
-Open `http://localhost:5173/demos/chat/`. Click **Alice** in one browser and **Bob** in another (or incognito) to try realtime chat in `#general`.
+Open `http://localhost:5173/demos/chat/`. Click **Alice** in one browser tab and **Bob** in another to try realtime chat in `#general`.
+
+> **Two terminals required:** Vite (`npm run dev`) only serves the UI. The embed API (`npm run dev:server`) must stay running on port 3001 — if it stops, you'll see proxy/`ECONNREFUSED` errors when opening a user.
 
 ## Environment
 
