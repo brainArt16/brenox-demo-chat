@@ -38,6 +38,16 @@ npm run build
 npm run preview
 ```
 
+## Deploy to brenox-web
+
+The live demo at [breno-x.com/demos/chat](https://www.breno-x.com/demos/chat) is served as static files from the `brenox-web` Next.js app. After changing the demo, sync the Vite build into `brenox-web/public/demos/chat/`:
+
+```bash
+npm run sync:web-static
+```
+
+Then commit the updated files in `brenox-web` and deploy `brenox-web` as usual. The demo source stays in this repo; only the built `dist/` output is copied into the web app.
+
 ## Links
 
 - [Interactive tutorial](https://www.breno-x.com/resources/demos/chat)
