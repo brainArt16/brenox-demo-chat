@@ -1,13 +1,34 @@
-import { useEffect, useRef, useState } from "react";
-import type { Attachment, ChannelServerEventType } from "@brenox/sdk";
-import { useBrenoxClient, useChannel, useMessages } from "@brenox/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Attachment, ChannelServerEventType, MessageListItem } from "@brenox/sdk";
+import { useBrenoxClient, useChannel } from "@brenox/react";
+import { asArray } from "../utils/asArray";
 import { formatError } from "../utils/errors";
 
 interface ChatPanelProps {
   workspaceId: number;
   channelId: number;
   currentUserId: number;
-  onConnectionStateChange?: (state: ReturnType<typeof useMessages>["connectionState"]) => void;
+  onConnectionStateChange?: (state: ReturnType<typeof useChannel>["connectionState"]) => void;
+}
+
+function toListItem(
+  payload: {
+    id: number;
+    sender_id: number;
+    content: string;
+    created_at: string;
+  },
+  channelId: number,
+  username = "",
+): MessageListItem {
+  return {
+    id: payload.id,
+    channel_id: channelId,
+    sender_id: payload.sender_id,
+    username,
+    content: payload.content,
+    created_at: payload.created_at,
+  };
 }
 
 interface FeedEntry {
@@ -36,17 +57,24 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const client = useBrenoxClient();
   const {
-    messages,
-    loading,
-    error,
+    connection,
     connectionState,
-    sendMessage,
-    refresh,
-  } = useMessages(workspaceId, channelId);
-  const { connection, startTyping, stopTyping } = useChannel(
-    workspaceId,
-    channelId,
-  );
+    connect,
+    startTyping,
+    stopTyping,
+  } = useChannel(workspaceId, channelId);
+
+  const [messages, setMessages] = useState<MessageListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const visibleMessages = asArray(messages);
+
+  const refresh = useCallback(async () => {
+    const items = asArray(
+      await client.messages.list(workspaceId, channelId, { limit: 50 }),
+    );
+    setMessages(items);
+  }, [client, workspaceId, channelId]);
 
   const [draft, setDraft] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -65,8 +93,62 @@ export function ChatPanel({
   }, [connectionState, onConnectionStateChange]);
 
   useEffect(() => {
+    void connect();
+  }, [connect]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    refresh()
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!connection) return;
+
+    const offNew = connection.on("message.new", (event) => {
+      setMessages((prev) => {
+        if (prev.some((message) => message.id === event.payload.id)) {
+          return prev;
+        }
+        return [...prev, toListItem(event.payload, channelId)];
+      });
+    });
+
+    const offUpdated = connection.on("message.updated", (event) => {
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === event.payload.id
+            ? { ...message, content: event.payload.content }
+            : message,
+        ),
+      );
+    });
+
+    return () => {
+      offNew();
+      offUpdated();
+    };
+  }, [connection, channelId]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [visibleMessages]);
 
   useEffect(() => {
     if (!connection) return;
@@ -116,7 +198,7 @@ export function ChatPanel({
     async function loadAttachments() {
       const map: Record<number, Attachment[]> = {};
       await Promise.all(
-        messages.map(async (message) => {
+        visibleMessages.map(async (message) => {
           try {
             const items = await client.attachments.listByMessage(
               workspaceId,
@@ -136,23 +218,27 @@ export function ChatPanel({
       }
     }
 
-    if (messages.length > 0) {
+    if (visibleMessages.length > 0) {
       void loadAttachments();
     }
 
     return () => {
       cancelled = true;
     };
-  }, [messages, client, workspaceId, channelId]);
+  }, [visibleMessages, client, workspaceId, channelId]);
 
   function handleDraftChange(value: string) {
     setDraft(value);
+    if (connectionState !== "connected") return;
+
     startTyping();
     if (typingTimeoutRef.current !== null) {
       window.clearTimeout(typingTimeoutRef.current);
     }
     typingTimeoutRef.current = window.setTimeout(() => {
-      stopTyping();
+      if (connection?.connectionState === "connected") {
+        stopTyping();
+      }
     }, 1500);
   }
 
@@ -163,7 +249,9 @@ export function ChatPanel({
 
     setSending(true);
     setSendError(null);
-    stopTyping();
+    if (connectionState === "connected") {
+      stopTyping();
+    }
 
     try {
       let uploaded:
@@ -199,8 +287,13 @@ export function ChatPanel({
           [message.id]: attached,
         }));
         await refresh();
-      } else {
-        await sendMessage(text);
+      } else if (text) {
+        if (connectionState === "connected" && connection) {
+          connection.sendMessage(text);
+        } else {
+          await client.messages.send(workspaceId, channelId, { content: text });
+          await refresh();
+        }
       }
 
       setDraft("");
@@ -236,12 +329,12 @@ export function ChatPanel({
             {formatError(error)}
           </p>
         )}
-        {!loading && messages.length === 0 && (
+        {!loading && visibleMessages.length === 0 && (
           <p className="text-sm text-text-muted">No messages yet. Say hello!</p>
         )}
 
         <ul className="space-y-3">
-          {messages.map((message) => (
+          {visibleMessages.map((message) => (
             <li
               key={message.id}
               className={`rounded-lg border border-border px-3 py-2 ${

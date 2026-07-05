@@ -42,12 +42,12 @@ export function NotificationsPanel() {
             {formatError(error)}
           </p>
         )}
-        {!loading && notifications.length === 0 && (
+        {!loading && (notifications ?? []).length === 0 && (
           <p className="text-sm text-text-muted">No notifications.</p>
         )}
 
         <ul className="space-y-2">
-          {notifications.map((item) => (
+          {(notifications ?? []).map((item) => (
             <li
               key={item.id}
               className={`rounded-md border border-border p-3 text-sm ${

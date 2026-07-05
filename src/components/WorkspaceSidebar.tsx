@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Channel, WorkspaceListItem } from "@brenox/sdk";
 import { useBrenoxClient } from "@brenox/react";
+import { asArray } from "../utils/asArray";
 import { formatError } from "../utils/errors";
 
 interface WorkspaceSidebarProps {
@@ -30,7 +31,7 @@ export function WorkspaceSidebar({
     setLoadingWorkspaces(true);
     setError(null);
     try {
-      const items = await client.workspaces.list();
+      const items = asArray(await client.workspaces.list());
       setWorkspaces(items);
       if (items.length > 0 && workspaceId === null) {
         onWorkspaceChange(items[0].id);
@@ -50,7 +51,7 @@ export function WorkspaceSidebar({
     setLoadingChannels(true);
     setError(null);
     try {
-      const items = await client.channels.list(workspaceId);
+      const items = asArray(await client.channels.list(workspaceId));
       setChannels(items);
       if (items.length > 0 && channelId === null) {
         onChannelChange(items[0].ID);
