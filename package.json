@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/index.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
@@ -12,7 +13,7 @@
   },
   "dependencies": {
     "@brenox/react": "^0.1.2",
-    "@brenox/sdk": "^0.1.2",
+    "@brenox/sdk": "file:../brenox-sdk",
     "@tailwindcss/vite": "^4.3.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

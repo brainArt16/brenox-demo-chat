@@ -1,60 +1,67 @@
-# Brenox Chat Demo
+# Brenox Embed Chat Demo
 
-Standalone Vite + React demo for the Brenox chat SDK. Deployed at `/demos/chat/` on the Brenox site.
+Demonstrates the **embed-first** Brenox integration: your backend provisions users with `BrenoxServer` + API key; your frontend chats with `BrenoxClient` + issued session tokens. End users never register on Brenox directly.
 
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env   # optional — defaults to production API
+cp .env.example .env
+# Set BRENOX_API_KEY=bx_test_... from https://www.breno-x.com/apps
+```
+
+**Terminal 1 — embed API**
+
+```bash
+npm run dev:server
+```
+
+**Terminal 2 — chat UI**
+
+```bash
 npm run dev
 ```
 
-Open the URL Vite prints (usually `http://localhost:5173/demos/chat/`).
+Open `http://localhost:5173/demos/chat/`. Click **Alice** in one browser and **Bob** in another (or incognito) to try realtime chat in `#general`.
 
 ## Environment
 
 | Variable | Description |
 |----------|-------------|
-| `VITE_BRENOX_API_URL` | Brenox API base URL. Defaults to `https://api.breno-x.com`. |
+| `BRENOX_API_KEY` | Sandbox API key (`bx_test_*`) — server only, never in frontend |
+| `BRENOX_API_URL` | Brenox engine URL (default `http://localhost:8080`) |
+| `VITE_BRENOX_API_URL` | Same URL for `BrenoxClient` in the browser |
+| `VITE_DEMO_API_URL` | Leave empty to use Vite proxy (`/api` → port 3001) |
+| `DEMO_SERVER_PORT` | Embed API port (default `3001`) |
 
-## Features
+## Architecture
 
-- **Auth** — register or log in; JWT stored in `localStorage` under `brenox_demo_chat_token`
-- **Workspaces** — list, create, view details
-- **Channels** — list, create, join
-- **Live chat** — `useMessages` with WebSocket updates
-- **Typing & events** — `useChannel` connection events (typing, presence, members, notifications)
-- **Notifications** — `useNotifications` with polling
-- **Attachments** — upload via presigned URL, attach to message, list on messages
-- **Reset** — clears token and app state
+```
+Your embed API (server/)     BrenoxServer + API key
+        ↓ POST /v1/users, /v1/sessions
+Brenox engine (api.breno-x.com)
+        ↑ JWT + WebSocket
+Your chat UI (src/)          BrenoxClient + @brenox/react
+```
 
-## Build
+## Features demonstrated
 
-Production build uses base path `/demos/chat/`:
+- Embed session tokens (`POST /v1/sessions`)
+- Live chat (REST history + WebSocket)
+- Typing indicators and channel events
+- Notifications (`useNotifications`)
+- File attachments
+
+## Build & deploy
 
 ```bash
 npm run build
-npm run preview
+npm run sync:web-static   # copies dist/ into brenox-web/public/demos/chat
 ```
 
-## Deploy to brenox-web
-
-The live demo at [breno-x.com/demos/chat](https://www.breno-x.com/demos/chat) is served as static files from the `brenox-web` Next.js app. After changing the demo, sync the Vite build into `brenox-web/public/demos/chat/`:
-
-```bash
-npm run sync:web-static
-```
-
-Then commit the updated files in `brenox-web` and deploy `brenox-web` as usual. The demo source stays in this repo; only the built `dist/` output is copied into the web app.
+The embed API must run on your backend in production — the static UI alone is not enough for the Alice/Bob launcher.
 
 ## Links
 
-- [Interactive tutorial](https://www.breno-x.com/resources/demos/chat)
+- [Step-by-step tutorial](https://www.breno-x.com/resources/demos/chat)
 - [SDK docs](https://www.breno-x.com/docs)
-
-## Stack
-
-- Vite 8, React 19, TypeScript
-- Tailwind CSS 4 (`@tailwindcss/vite`)
-- `@brenox/sdk@0.1.2`, `@brenox/react@0.1.2`

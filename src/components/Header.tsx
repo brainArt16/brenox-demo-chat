@@ -12,6 +12,7 @@ interface HeaderProps {
   email?: string;
   connectionState?: ConnectionState;
   onLogout: () => void;
+  logoutLabel?: string;
 }
 
 export function Header({
@@ -19,6 +20,7 @@ export function Header({
   email,
   connectionState,
   onLogout,
+  logoutLabel = "Reset / Logout",
 }: HeaderProps) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
@@ -60,7 +62,7 @@ export function Header({
           onClick={onLogout}
           className="rounded-md border border-border bg-surface px-3 py-1.5 text-text hover:bg-surface-muted"
         >
-          Reset / Logout
+          {logoutLabel}
         </button>
       </div>
     </header>

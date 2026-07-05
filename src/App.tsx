@@ -2,20 +2,26 @@ import { useCallback, useEffect, useState } from "react";
 import type { ConnectionState, UserProfile } from "@brenox/sdk";
 import { BrenoxProvider, useBrenoxClient } from "@brenox/react";
 import { brenoxClient } from "./brenox/client";
-import { AuthForm } from "./components/AuthForm";
 import { ChatPanel } from "./components/ChatPanel";
+import { EmbedLauncher } from "./components/EmbedLauncher";
+import { EmbedRoomBar } from "./components/EmbedRoomBar";
 import { Header } from "./components/Header";
 import { NotificationsPanel } from "./components/NotificationsPanel";
-import { WorkspaceSidebar } from "./components/WorkspaceSidebar";
 import { formatError } from "./utils/errors";
+
+interface EmbedSession {
+  personaLabel: string;
+  workspaceId: number;
+  channelId: number;
+  channelName: string;
+}
 
 function DemoApp() {
   const client = useBrenoxClient();
   const [bootstrapping, setBootstrapping] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [embedSession, setEmbedSession] = useState<EmbedSession | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [workspaceId, setWorkspaceId] = useState<number | null>(null);
-  const [channelId, setChannelId] = useState<number | null>(null);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
 
@@ -26,12 +32,14 @@ function DemoApp() {
       const token = await client.getToken();
       if (!token) {
         setUser(null);
+        setEmbedSession(null);
         return;
       }
       const profile = await client.users.me();
       setUser(profile);
     } catch (err) {
       setUser(null);
+      setEmbedSession(null);
       setAuthError(formatError(err));
       await client.auth.logout();
     } finally {
@@ -43,11 +51,28 @@ function DemoApp() {
     void loadSession();
   }, [loadSession]);
 
-  async function handleLogout() {
+  async function handleLaunch(input: {
+    persona: "alice" | "bob";
+    token: string;
+    workspaceId: number;
+    channelId: number;
+    channelName: string;
+    username: string;
+  }) {
+    await client.setToken(input.token);
+    setEmbedSession({
+      personaLabel: input.username,
+      workspaceId: input.workspaceId,
+      channelId: input.channelId,
+      channelName: input.channelName,
+    });
+    await loadSession();
+  }
+
+  async function handleSwitchUser() {
     await client.auth.logout();
     setUser(null);
-    setWorkspaceId(null);
-    setChannelId(null);
+    setEmbedSession(null);
     setConnectionState("disconnected");
     setAuthError(null);
   }
@@ -60,12 +85,12 @@ function DemoApp() {
     );
   }
 
-  if (!user) {
+  if (!user || !embedSession) {
     return (
       <div className="flex min-h-svh flex-col">
-        <Header onLogout={() => void handleLogout()} />
+        <Header onLogout={() => void handleSwitchUser()} />
         <main className="flex flex-1 items-center justify-center p-6">
-          <div className="w-full max-w-md space-y-4">
+          <div className="w-full max-w-2xl space-y-4">
             {authError && (
               <p
                 className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger"
@@ -74,7 +99,7 @@ function DemoApp() {
                 Previous session expired: {authError}
               </p>
             )}
-            <AuthForm onAuthenticated={() => void loadSession()} />
+            <EmbedLauncher onLaunch={(input) => void handleLaunch(input)} />
           </div>
         </main>
       </div>
@@ -86,33 +111,26 @@ function DemoApp() {
       <Header
         username={user.username}
         email={user.email}
-        connectionState={channelId !== null ? connectionState : undefined}
-        onLogout={() => void handleLogout()}
+        connectionState={connectionState}
+        onLogout={() => void handleSwitchUser()}
+        logoutLabel="Switch user"
       />
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <WorkspaceSidebar
-          workspaceId={workspaceId}
-          channelId={channelId}
-          onWorkspaceChange={setWorkspaceId}
-          onChannelChange={setChannelId}
+        <EmbedRoomBar
+          channelName={embedSession.channelName}
+          workspaceId={embedSession.workspaceId}
+          channelId={embedSession.channelId}
+          personaLabel={embedSession.personaLabel}
         />
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {workspaceId !== null && channelId !== null ? (
-            <ChatPanel
-              workspaceId={workspaceId}
-              channelId={channelId}
-              currentUserId={user.id}
-              onConnectionStateChange={setConnectionState}
-            />
-          ) : (
-            <div className="flex flex-1 items-center justify-center p-6">
-              <p className="text-text-muted">
-                Select or create a workspace and channel to start chatting.
-              </p>
-            </div>
-          )}
+          <ChatPanel
+            workspaceId={embedSession.workspaceId}
+            channelId={embedSession.channelId}
+            currentUserId={user.id}
+            onConnectionStateChange={setConnectionState}
+          />
         </main>
 
         <NotificationsPanel />
