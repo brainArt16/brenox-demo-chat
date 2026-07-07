@@ -235,6 +235,9 @@ export function useWebRtcCall(currentUserId: number) {
 
     const offLeave = signaling.on("call.leave", (event) => {
       closePeer(event.payload.user_id);
+      if (peersRef.current.size === 0 && activeCallRef.current) {
+        cleanupCall();
+      }
     });
 
     const offEnd = signaling.on("call.end", () => {
@@ -258,6 +261,19 @@ export function useWebRtcCall(currentUserId: number) {
     handleRemoteOffer,
     offerToPeer,
   ]);
+
+  useEffect(() => {
+    const handleUnload = () => {
+      const call = activeCallRef.current;
+      if (!call) return;
+      void leave(call.id).catch(() => {
+        // Best-effort during tab close; server also recovers stale solo calls.
+      });
+    };
+
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, [leave]);
 
   const startCall = useCallback(
     async (mode: CallMode) => {
