@@ -29,6 +29,7 @@ export interface DemoConfig {
 export interface DemoSessionResponse {
   token: string;
   workspace_id: number;
+  environment: "live" | "sandbox";
   channel_id: number;
   user: UserProfile & { external_id?: string };
   persona: string;

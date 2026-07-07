@@ -205,6 +205,7 @@ const httpServer = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         token: session.token,
         workspace_id: session.workspace_id,
+        environment: session.environment,
         channel_id: session.channel_id ?? config.channelId,
         user: session.user,
         persona,
