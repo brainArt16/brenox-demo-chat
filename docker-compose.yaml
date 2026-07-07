@@ -1,0 +1,23 @@
+# Coolify / production — single container serves UI + embed API.
+#
+#   docker compose up -d --build
+
+name: ${COMPOSE_PROJECT_NAME:-brenox-demo-chat}
+
+services:
+  demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_BRENOX_API_URL: ${VITE_BRENOX_API_URL:-https://api.breno-x.com}
+        VITE_DEMO_API_URL: ${VITE_DEMO_API_URL:-}
+        VITE_APP_BASE_PATH: ${VITE_APP_BASE_PATH:-/}
+    restart: ${DEPLOY_RESTART:-unless-stopped}
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      BRENOX_API_URL: ${BRENOX_API_URL:-https://api.breno-x.com}
+      BRENOX_API_KEY: ${BRENOX_API_KEY}

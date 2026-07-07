@@ -1,19 +1,20 @@
 import fs from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrenoxServer } from "@brenox/sdk/server";
 
-const PORT = Number(process.env.DEMO_SERVER_PORT ?? 3001);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DIST_DIR = path.join(__dirname, "..", "dist");
+const PORT = Number(process.env.PORT ?? process.env.DEMO_SERVER_PORT ?? 3001);
+const isProduction = process.env.NODE_ENV === "production";
 const baseUrl = (
   process.env.BRENOX_API_URL ?? "http://localhost:8080"
 ).replace(/\/$/, "");
 const apiKey = process.env.BRENOX_API_KEY;
 const DEMO_CHANNEL_NAME = "general";
-const STATE_FILE = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  ".demo-room.json",
-);
+const STATE_FILE = path.join(__dirname, ".demo-room.json");
 
 if (!apiKey) {
   console.error(
@@ -115,6 +116,54 @@ async function readJson(req) {
   return raw ? JSON.parse(raw) : {};
 }
 
+const MIME_TYPES = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".woff2": "font/woff2",
+};
+
+async function serveStatic(req, res) {
+  const requestPath = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+  const relativePath =
+    requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
+  const filePath = path.join(DIST_DIR, relativePath);
+  const normalized = path.normalize(filePath);
+
+  if (!normalized.startsWith(DIST_DIR)) {
+    sendJson(res, 404, { error: "not found" });
+    return true;
+  }
+
+  try {
+    const fileStat = await fs.stat(normalized);
+    if (!fileStat.isFile()) {
+      throw new Error("not a file");
+    }
+
+    const ext = path.extname(normalized);
+    res.writeHead(200, {
+      "Content-Type": MIME_TYPES[ext] ?? "application/octet-stream",
+    });
+    createReadStream(normalized).pipe(res);
+    return true;
+  } catch {
+    if (!relativePath.includes(".")) {
+      const indexPath = path.join(DIST_DIR, "index.html");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      createReadStream(indexPath).pipe(res);
+      return true;
+    }
+    sendJson(res, 404, { error: "not found" });
+    return true;
+  }
+}
+
 const httpServer = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     sendJson(res, 204, {});
@@ -163,6 +212,11 @@ const httpServer = http.createServer(async (req, res) => {
       return;
     }
 
+    if (isProduction && req.method === "GET") {
+      await serveStatic(req, res);
+      return;
+    }
+
     sendJson(res, 404, { error: "not found" });
   } catch (err) {
     console.error(err);
@@ -173,7 +227,11 @@ const httpServer = http.createServer(async (req, res) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`Embed demo API listening on http://localhost:${PORT}`);
+  console.log(
+    isProduction
+      ? `Brenox demo chat listening on http://localhost:${PORT}`
+      : `Embed demo API listening on http://localhost:${PORT}`,
+  );
   console.log(`Brenox engine: ${baseUrl}`);
   ensureRoom().catch((err) => {
     console.error("Demo room bootstrap failed:", err);

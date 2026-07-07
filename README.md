@@ -62,9 +62,29 @@ Your chat UI (src/)          BrenoxClient + @brenox/react
 
 ```bash
 npm run build   # outputs dist/
+NODE_ENV=production node server/index.mjs   # serves dist/ + /api/*
 ```
 
-Host `dist/` on your own domain (static hosting) and deploy the embed API (`server/index.mjs`) on your backend — it holds the API key and issues session tokens. The static UI alone is not enough for the Alice/Bob launcher.
+The production container serves the built UI and embed API from one process (`server/index.mjs`).
+
+### Coolify
+
+1. **New resource** → Application → GitHub repo `brainArt16/brenox-demo-chat`, branch `main`
+2. **Build pack** → Docker Compose, compose file `docker-compose.yaml`, base directory `/`
+3. **Domain** → e.g. `https://demo-chat.breno-x.com`
+4. **Environment** (copy from `.env.prod.example`):
+   - `BRENOX_API_URL=https://api.breno-x.com`
+   - `BRENOX_API_KEY=bx_test_...` (sandbox key from [Brenox console](https://www.breno-x.com/apps))
+   - `VITE_BRENOX_API_URL=https://api.breno-x.com`
+   - `VITE_DEMO_API_URL=` (empty — UI calls `/api` on the same host)
+5. **Brenox engine** — add the demo domain to CORS + WebSocket origins:
+   ```env
+   CORS_ALLOWED_ORIGINS=https://www.breno-x.com,https://demo-chat.breno-x.com
+   WS_ALLOWED_ORIGINS=https://www.breno-x.com,https://demo-chat.breno-x.com
+   ```
+6. Deploy. Open your demo URL and pick **Alice** / **Bob**.
+
+`VITE_*` values are baked in at **build** time. After changing them in Coolify, trigger **Rebuild without cache**.
 
 ## Troubleshooting
 
