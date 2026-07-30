@@ -26,8 +26,16 @@ if (!apiKey) {
 const server = new BrenoxServer({ baseUrl, apiKey });
 
 const PERSONAS = {
-  alice: { external_id: "demo-alice", username: "Alice" },
-  bob: { external_id: "demo-bob", username: "Bob" },
+  alice: {
+    external_id: "demo-alice",
+    username: "Alice",
+    email: "demo-alice@demo.brenox.local",
+  },
+  bob: {
+    external_id: "demo-bob",
+    username: "Bob",
+    email: "demo-bob@demo.brenox.local",
+  },
 };
 
 /** @type {{ workspaceId: number; channelId: number } | null} */
@@ -62,29 +70,65 @@ async function persistRoom(nextRoom) {
   );
 }
 
+async function clearPersistedRoom() {
+  room = null;
+  try {
+    await fs.unlink(STATE_FILE);
+  } catch {
+    // ignore missing state file
+  }
+}
+
+async function provisionPersonas() {
+  await server.users.provision({
+    external_id: PERSONAS.alice.external_id,
+    username: PERSONAS.alice.username,
+    email: PERSONAS.alice.email,
+  });
+  await server.users.provision({
+    external_id: PERSONAS.bob.external_id,
+    username: PERSONAS.bob.username,
+    email: PERSONAS.bob.email,
+  });
+}
+
+async function createDemoChannel() {
+  // No sticky idempotency key — a cached key can return a deleted channel id
+  // after an engine DB reset. Sandbox create is already idempotent by name.
+  const channel = await server.channels.create({ name: DEMO_CHANNEL_NAME });
+  return {
+    workspaceId: channel.workspace_id,
+    channelId: channel.id,
+  };
+}
+
 async function ensureRoom() {
   if (room) return room;
   if (roomPromise) return roomPromise;
 
   roomPromise = (async () => {
+    await provisionPersonas();
+
     const persisted = await loadPersistedRoom();
     if (persisted) {
-      room = persisted;
-      return room;
+      // Prefer recreating/resolving #general in the current app workspace so a
+      // stale .demo-room.json (wrong workspace or deleted channel) cannot stick.
+      try {
+        const resolved = await createDemoChannel();
+        room = resolved;
+        if (
+          resolved.workspaceId !== persisted.workspaceId ||
+          resolved.channelId !== persisted.channelId
+        ) {
+          await persistRoom(room);
+        }
+        return room;
+      } catch {
+        await clearPersistedRoom();
+      }
     }
 
-    await server.users.provision(PERSONAS.alice);
-    await server.users.provision(PERSONAS.bob);
-
-    const channel = await server.channels.create(
-      { name: DEMO_CHANNEL_NAME },
-      `demo-channel-${DEMO_CHANNEL_NAME}`,
-    );
-
-    room = {
-      workspaceId: channel.workspace_id,
-      channelId: channel.id,
-    };
+    room = await createDemoChannel();
     await persistRoom(room);
     return room;
   })();
@@ -93,6 +137,39 @@ async function ensureRoom() {
     return await roomPromise;
   } finally {
     roomPromise = null;
+  }
+}
+
+async function createPersonaSession(mapping) {
+  await server.users.provision({
+    external_id: mapping.external_id,
+    username: mapping.username,
+    email: mapping.email,
+  });
+
+  let config = await ensureRoom();
+  try {
+    return {
+      session: await server.sessions.create({
+        external_id: mapping.external_id,
+        channel_id: config.channelId,
+      }),
+      config,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/channel not found/i.test(message)) {
+      throw err;
+    }
+    await clearPersistedRoom();
+    config = await ensureRoom();
+    return {
+      session: await server.sessions.create({
+        external_id: mapping.external_id,
+        channel_id: config.channelId,
+      }),
+      config,
+    };
   }
 }
 
@@ -196,11 +273,7 @@ const httpServer = http.createServer(async (req, res) => {
         return;
       }
 
-      const config = await ensureRoom();
-      const session = await server.sessions.create({
-        external_id: mapping.external_id,
-        channel_id: config.channelId,
-      });
+      const { session, config } = await createPersonaSession(mapping);
 
       sendJson(res, 200, {
         token: session.token,
