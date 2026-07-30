@@ -60,6 +60,7 @@ Your chat UI (src/)          BrenoxClient + @brenox/react
 - Voice & video calls (`useCallSignaling` + WebRTC mesh)
 - Typing indicators and channel presence events
 - Notifications (`useNotifications`)
+- File attachments (paperclip upload + image/file previews)
 
 ## Build & deploy
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageCircle, X } from "lucide-react";
-import type { ConnectionState, MessageListItem } from "@brenox/sdk";
+import type { Attachment, ConnectionState, MessageListItem } from "@brenox/sdk";
 import { useBrenoxClient } from "@brenox/react";
 import { ChannelSessionProvider, useChannelSession } from "../context/channel-session";
 import { asArray } from "../utils/asArray";
@@ -54,9 +54,13 @@ function SupportChatPanel({
   const client = useBrenoxClient();
   const { connection, connectionState } = useChannelSession();
   const [messages, setMessages] = useState<MessageListItem[]>([]);
+  const [attachmentsByMessage, setAttachmentsByMessage] = useState<
+    Record<number, Attachment[]>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef<number | null>(null);
+  const loadedAttachmentIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     onConnectionStateChange?.(connectionState);
@@ -89,6 +93,25 @@ function SupportChatPanel({
       });
     });
 
+    const offUpdated = connection.on("message.updated", (event) => {
+      const payloadAttachments = event.payload.attachments;
+      if (payloadAttachments?.length) {
+        loadedAttachmentIdsRef.current.add(event.payload.id);
+        setAttachmentsByMessage((prev) => ({
+          ...prev,
+          [event.payload.id]: payloadAttachments.map((att) => ({
+            id: att.id,
+            message_id: event.payload.id,
+            file_name: att.file_name,
+            mime_type: att.mime_type,
+            size_bytes: att.size_bytes,
+            url: att.url,
+            created_at: att.created_at,
+          })),
+        }));
+      }
+    });
+
     const offTypingStart = connection.on("typing.start", (event) => {
       if (event.payload.user_id !== currentUserId) setIsTyping(true);
     });
@@ -98,10 +121,46 @@ function SupportChatPanel({
 
     return () => {
       offNew();
+      offUpdated();
       offTypingStart();
       offTypingStop();
     };
   }, [connection, channelId, currentUserId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const toFetch = messages.filter(
+      (message) => !loadedAttachmentIdsRef.current.has(message.id),
+    );
+    if (toFetch.length === 0) return;
+
+    async function loadAttachments() {
+      const map: Record<number, Attachment[]> = {};
+      await Promise.all(
+        toFetch.map(async (message) => {
+          loadedAttachmentIdsRef.current.add(message.id);
+          try {
+            const items = await client.attachments.listByMessage(
+              workspaceId,
+              channelId,
+              message.id,
+            );
+            if (items.length > 0) map[message.id] = items;
+          } catch {
+            // optional
+          }
+        }),
+      );
+      if (!cancelled && Object.keys(map).length > 0) {
+        setAttachmentsByMessage((prev) => ({ ...prev, ...map }));
+      }
+    }
+
+    void loadAttachments();
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, client, workspaceId, channelId]);
 
   const conversation: Conversation = useMemo(
     () => ({
@@ -119,8 +178,11 @@ function SupportChatPanel({
   );
 
   const uiMessages: Message[] = useMemo(
-    () => messages.map((m) => messageToUi(m, currentUserId)),
-    [messages, currentUserId],
+    () =>
+      messages.map((m) =>
+        messageToUi(m, currentUserId, attachmentsByMessage[m.id]),
+      ),
+    [messages, currentUserId, attachmentsByMessage],
   );
 
   const currentUser = useMemo(
@@ -151,36 +213,69 @@ function SupportChatPanel({
     }, 1500);
   }
 
-  async function handleSend(text: string) {
-    if (connectionState === "connected" && connection) {
-      connection.stopTyping();
-      connection.sendMessage(text);
-      return;
+  async function handleSend(text: string, file?: File | null) {
+    if (connectionState === "connected") {
+      connection?.stopTyping();
     }
-    await client.messages.send(workspaceId, channelId, { content: text });
-    await refresh();
+
+    try {
+      if (file) {
+        const uploaded = await client.attachments.uploadFile(file, {
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+        });
+        const content = text || `(attachment: ${uploaded.file_name})`;
+        const message = await client.messages.send(workspaceId, channelId, {
+          content,
+        });
+        const attached = await client.attachments.attachToMessage(
+          workspaceId,
+          channelId,
+          message.id,
+          [uploaded],
+        );
+        loadedAttachmentIdsRef.current.add(message.id);
+        setAttachmentsByMessage((prev) => ({
+          ...prev,
+          [message.id]: attached,
+        }));
+        await refresh();
+        return;
+      }
+
+      if (!text) return;
+
+      if (connectionState === "connected" && connection) {
+        connection.sendMessage(text);
+        return;
+      }
+      await client.messages.send(workspaceId, channelId, { content: text });
+      await refresh();
+    } catch (err) {
+      setError(formatError(err));
+    }
   }
 
   return (
-    <div className="flex h-[min(32rem,70vh)] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between border-b border-gray-100 bg-emerald-600 px-4 py-3 text-white">
+    <div className="flex h-[min(32rem,70vh)] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl shadow-black/40">
+      <div className="flex items-center justify-between border-b border-border bg-surface-muted px-4 py-3">
         <div>
-          <p className="text-sm font-semibold">Support</p>
-          <p className="text-xs text-emerald-100">
+          <p className="text-sm font-semibold text-text">Support</p>
+          <p className="text-xs text-text-muted">
             {connectionState === "connected" ? "Online" : connectionState}
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full p-1.5 hover:bg-emerald-500"
+          className="rounded-full p-1.5 text-text-muted hover:bg-border hover:text-text"
           aria-label="Close support chat"
         >
           <X size={18} />
         </button>
       </div>
       {error && (
-        <p className="bg-red-50 px-3 py-2 text-xs text-red-600" role="alert">
+        <p className="bg-danger/10 px-3 py-2 text-xs text-danger" role="alert">
           {error}
         </p>
       )}
@@ -189,19 +284,19 @@ function SupportChatPanel({
           currentConversation={conversation}
           messages={uiMessages}
           currentUser={currentUser}
-          onMessageSend={(text) => void handleSend(text)}
+          onMessageSend={(text, file) => void handleSend(text, file)}
           onInputChange={handleDraftChange}
           compactMode
           showReadReceipts={false}
           enableAudio={false}
           enableEmojis={false}
-          enableAttachments={false}
+          enableAttachments
           enableVoiceCall={false}
           enableVideoCall={false}
           placeholderText="How can we help?"
           colors={{
-            messageOwn: "bg-emerald-500 text-white",
-            messageOther: "bg-gray-100 text-gray-900",
+            messageOwn: "bg-accent text-surface",
+            messageOther: "bg-surface-muted text-text border border-border",
           }}
         />
       </div>
@@ -225,7 +320,7 @@ export function SupportFab(props: SupportFabProps) {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg transition hover:bg-emerald-700"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-surface shadow-lg shadow-black/40 transition hover:bg-accent-hover"
             aria-label={open ? "Close support chat" : "Open support chat"}
             aria-expanded={open}
           >

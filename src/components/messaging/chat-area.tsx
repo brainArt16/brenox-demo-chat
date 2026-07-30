@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import {
   ArrowLeft,
   MoreVertical,
@@ -7,7 +7,9 @@ import {
   Send,
   Smile,
   Video,
+  X,
 } from "lucide-react";
+import { InitialsAvatar } from "./InitialsAvatar";
 import { MessageBubble } from "./message-bubble";
 import type { ChatAreaProps } from "./types";
 
@@ -34,12 +36,16 @@ export function ChatArea({
   compactMode = false,
 }: ChatAreaProps) {
   const [messageInput, setMessageInput] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleSendMessage() {
     const text = messageInput.trim();
-    if (!text) return;
-    onMessageSend(text);
+    if (!text && !pendingFile) return;
+    onMessageSend(text, pendingFile);
     setMessageInput("");
+    setPendingFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     onInputChange?.("");
   }
 
@@ -57,16 +63,16 @@ export function ChatArea({
 
   if (!currentConversation) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-gray-50">
-        <p className="text-gray-500">Select a conversation to start messaging</p>
+      <div className="flex flex-1 items-center justify-center bg-surface-muted">
+        <p className="text-text-muted">Select a conversation to start messaging</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-white">
+    <div className="flex flex-1 flex-col overflow-hidden bg-surface">
       <div
-        className={`flex items-center justify-between gap-2 border-b border-gray-200 px-3 sm:px-6 lg:px-8 ${
+        className={`flex items-center justify-between gap-2 border-b border-border px-3 sm:px-6 lg:px-8 ${
           compactMode ? "py-2" : "py-3 sm:py-4"
         }`}
       >
@@ -75,31 +81,30 @@ export function ChatArea({
             <button
               type="button"
               onClick={onBack}
-              className="-ml-1 flex-shrink-0 rounded-full p-2 transition hover:bg-gray-100 md:hidden"
+              className="-ml-1 flex-shrink-0 rounded-full p-2 transition hover:bg-surface-muted md:hidden"
               aria-label="Back to conversations"
             >
-              <ArrowLeft size={22} className="text-gray-700" />
+              <ArrowLeft size={22} className="text-text" />
             </button>
           )}
           <div className="relative flex-shrink-0">
-            <img
-              src={currentConversation.avatar}
-              alt={currentConversation.name}
-              className={`rounded-full ${compactMode ? "h-8 w-8" : "h-10 w-10 sm:h-12 sm:w-12"}`}
+            <InitialsAvatar
+              name={currentConversation.name}
+              size={compactMode ? "md" : "lg"}
             />
             {currentConversation.participants?.some((p) => p.isOnline) && (
-              <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-green-500" />
+              <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-surface bg-success" />
             )}
           </div>
           <div className="min-w-0">
             <h2
-              className={`truncate font-semibold text-gray-900 ${compactMode ? "text-sm" : "text-base"}`}
+              className={`truncate font-semibold text-text ${compactMode ? "text-sm" : "text-base"}`}
             >
               {currentConversation.name}
             </h2>
             {currentConversation.isTyping && showTypingIndicator && (
               <p
-                className={`truncate text-emerald-600 ${compactMode ? "text-xs" : "text-sm"}`}
+                className={`truncate text-accent ${compactMode ? "text-xs" : "text-sm"}`}
               >
                 Someone is typing…
               </p>
@@ -112,16 +117,16 @@ export function ChatArea({
             currentConversation.participants.length > 0 && (
               <div className="-space-x-2 mr-1 hidden lg:flex">
                 {currentConversation.participants.slice(0, 3).map((p) => (
-                  <img
+                  <InitialsAvatar
                     key={p.id}
-                    src={p.avatar}
-                    alt={p.name}
-                    className="h-8 w-8 rounded-full border-2 border-white"
+                    name={p.name}
+                    size="md"
+                    className="ring-2 ring-surface"
                     title={p.name}
                   />
                 ))}
                 {currentConversation.participants.length > 3 && (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-emerald-100 text-xs font-bold text-emerald-700">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-xs font-bold text-accent ring-2 ring-surface">
                     +{currentConversation.participants.length - 3}
                   </div>
                 )}
@@ -131,60 +136,56 @@ export function ChatArea({
           {enableVoiceCall && (
             <button
               type="button"
-              onClick={() =>
-                onVoiceCallInitiated?.(currentConversation.id)
-              }
-              className="rounded-full p-2 transition hover:bg-gray-100"
+              onClick={() => onVoiceCallInitiated?.(currentConversation.id)}
+              className="rounded-full p-2 transition hover:bg-surface-muted"
               aria-label="Voice call"
               title="Start voice call"
             >
-              <Phone size={20} className="text-gray-600 hover:text-emerald-600" />
+              <Phone size={20} className="text-text-muted hover:text-accent" />
             </button>
           )}
           {enableVideoCall && (
             <button
               type="button"
-              onClick={() =>
-                onVideoCallInitiated?.(currentConversation.id)
-              }
-              className="rounded-full p-2 transition hover:bg-gray-100"
+              onClick={() => onVideoCallInitiated?.(currentConversation.id)}
+              className="rounded-full p-2 transition hover:bg-surface-muted"
               aria-label="Video call"
               title="Start video call"
             >
-              <Video size={20} className="text-gray-600 hover:text-emerald-600" />
+              <Video size={20} className="text-text-muted hover:text-accent" />
             </button>
           )}
           <button
             type="button"
-            className="hidden rounded-full p-2 transition hover:bg-gray-100 sm:inline-flex"
+            className="hidden rounded-full p-2 transition hover:bg-surface-muted sm:inline-flex"
             aria-label="More options"
           >
-            <MoreVertical size={20} className="text-gray-600" />
+            <MoreVertical size={20} className="text-text-muted" />
           </button>
         </div>
       </div>
 
       <div
-        className={`flex-1 space-y-4 overflow-y-auto px-3 sm:space-y-6 sm:px-6 lg:px-8 ${
+        className={`flex-1 space-y-4 overflow-y-auto bg-surface-muted/40 px-3 sm:space-y-6 sm:px-6 lg:px-8 ${
           compactMode ? "space-y-3 py-4" : "py-4 sm:py-6"
         }`}
       >
         {messages.length === 0 && (
           <div className="flex h-full items-center justify-center">
-            <p className="text-gray-400">No messages yet. Say hello!</p>
+            <p className="text-text-muted">No messages yet. Say hello!</p>
           </div>
         )}
 
         {messages.map((message) =>
           message.isTyping && showTypingIndicator ? (
             <div key={message.id} className="flex gap-2">
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-text-muted">
                 {message.sender.name} is typing
               </span>
               <div className="flex gap-1">
-                <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-gray-400" />
-                <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:100ms]" />
-                <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:200ms]" />
+                <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-text-muted" />
+                <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-text-muted [animation-delay:100ms]" />
+                <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-text-muted [animation-delay:200ms]" />
               </div>
             </div>
           ) : (
@@ -203,19 +204,46 @@ export function ChatArea({
       </div>
 
       <div
-        className={`border-t border-gray-200 px-3 sm:px-6 lg:px-8 ${
+        className={`border-t border-border px-3 sm:px-6 lg:px-8 ${
           compactMode ? "py-2" : "py-3 sm:py-4"
         }`}
       >
-        <div className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
-          {enableAttachments && (
+        {pendingFile && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text">
+            <Paperclip size={14} className="text-accent" />
+            <span className="min-w-0 flex-1 truncate">{pendingFile.name}</span>
             <button
               type="button"
-              className="flex-shrink-0 rounded-full p-1 transition hover:bg-gray-200"
-              aria-label="Attach file"
+              onClick={() => {
+                setPendingFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
+              className="rounded p-0.5 text-text-muted hover:text-text"
+              aria-label="Remove attachment"
             >
-              <Paperclip size={20} className="text-gray-600" />
+              <X size={14} />
             </button>
+          </div>
+        )}
+        <div className="flex items-center gap-2 rounded-full bg-surface-muted px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+          {enableAttachments && (
+            <>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-shrink-0 rounded-full p-1 transition hover:bg-border"
+                aria-label="Attach file"
+                title="Attach file"
+              >
+                <Paperclip size={20} className="text-text-muted" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="sr-only"
+                onChange={(e) => setPendingFile(e.target.files?.[0] ?? null)}
+              />
+            </>
           )}
 
           <input
@@ -224,16 +252,16 @@ export function ChatArea({
             onChange={(e) => handleDraftChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholderText}
-            className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400"
+            className="min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-text-muted"
           />
 
           {enableEmojis && (
             <button
               type="button"
-              className="hidden flex-shrink-0 rounded-full p-1 transition hover:bg-gray-200 sm:inline-flex"
+              className="hidden flex-shrink-0 rounded-full p-1 transition hover:bg-border sm:inline-flex"
               aria-label="Add emoji"
             >
-              <Smile size={20} className="text-gray-600" />
+              <Smile size={20} className="text-text-muted" />
             </button>
           )}
 
@@ -244,10 +272,11 @@ export function ChatArea({
           <button
             type="button"
             onClick={handleSendMessage}
-            className="flex-shrink-0 rounded-full p-1 transition hover:bg-gray-200"
+            disabled={!messageInput.trim() && !pendingFile}
+            className="flex-shrink-0 rounded-full p-1 transition hover:bg-border disabled:opacity-40"
             aria-label="Send message"
           >
-            <Send size={20} className="text-emerald-500" />
+            <Send size={20} className="text-accent" />
           </button>
         </div>
       </div>

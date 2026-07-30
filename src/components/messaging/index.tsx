@@ -6,11 +6,13 @@ import type { MessagingProps } from "./types";
 export type {
   Conversation,
   Message,
+  MessageAttachment,
   MessagingColors,
   MessagingProps,
   User,
 } from "./types";
 export { ChatArea } from "./chat-area";
+export { InitialsAvatar } from "./InitialsAvatar";
 export { MessageBubble } from "./message-bubble";
 export { Sidebar } from "./sidebar";
 
@@ -68,7 +70,7 @@ export function Messaging({
 
   return (
     <div
-      className={`flex overflow-hidden bg-gray-50 ${
+      className={`flex overflow-hidden bg-surface-muted ${
         compactMode ? "h-full" : "h-full min-h-0"
       } ${className}`}
     >

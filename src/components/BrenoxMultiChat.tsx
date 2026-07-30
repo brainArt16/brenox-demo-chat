@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Channel, ConnectionState, MessageListItem } from "@brenox/sdk";
+import type { Attachment, Channel, ConnectionState, MessageListItem } from "@brenox/sdk";
 import { useBrenoxClient } from "@brenox/react";
 import { ChannelSessionProvider, useChannelSession } from "../context/channel-session";
 import { asArray } from "../utils/asArray";
@@ -63,6 +63,9 @@ function ActiveChannelChat({
   const client = useBrenoxClient();
   const { connection, connectionState } = useChannelSession();
   const [messages, setMessages] = useState<MessageListItem[]>([]);
+  const [attachmentsByMessage, setAttachmentsByMessage] = useState<
+    Record<number, Attachment[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [typingUserIds, setTypingUserIds] = useState<Set<number>>(new Set());
@@ -71,10 +74,16 @@ function ActiveChannelChat({
     Record<number, { content: string; created_at: string }>
   >({});
   const typingTimeoutRef = useRef<number | null>(null);
+  const loadedAttachmentIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     onConnectionStateChange?.(connectionState);
   }, [connectionState, onConnectionStateChange]);
+
+  useEffect(() => {
+    loadedAttachmentIdsRef.current = new Set();
+    setAttachmentsByMessage({});
+  }, [channelId]);
 
   const refresh = useCallback(async () => {
     const items = asArray(
@@ -133,6 +142,22 @@ function ActiveChannelChat({
             : m,
         ),
       );
+      const payloadAttachments = event.payload.attachments;
+      if (payloadAttachments?.length) {
+        loadedAttachmentIdsRef.current.add(event.payload.id);
+        setAttachmentsByMessage((prev) => ({
+          ...prev,
+          [event.payload.id]: payloadAttachments.map((att) => ({
+            id: att.id,
+            message_id: event.payload.id,
+            file_name: att.file_name,
+            mime_type: att.mime_type,
+            size_bytes: att.size_bytes,
+            url: att.url,
+            created_at: att.created_at,
+          })),
+        }));
+      }
     });
 
     const offTypingStart = connection.on("typing.start", (event) => {
@@ -173,6 +198,43 @@ function ActiveChannelChat({
     };
   }, [connection, channelId, currentUserId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const toFetch = messages.filter(
+      (message) => !loadedAttachmentIdsRef.current.has(message.id),
+    );
+    if (toFetch.length === 0) return;
+
+    async function loadAttachments() {
+      const map: Record<number, Attachment[]> = {};
+      await Promise.all(
+        toFetch.map(async (message) => {
+          loadedAttachmentIdsRef.current.add(message.id);
+          try {
+            const items = await client.attachments.listByMessage(
+              workspaceId,
+              channelId,
+              message.id,
+            );
+            if (items.length > 0) {
+              map[message.id] = items;
+            }
+          } catch {
+            // attachments optional per message
+          }
+        }),
+      );
+      if (!cancelled && Object.keys(map).length > 0) {
+        setAttachmentsByMessage((prev) => ({ ...prev, ...map }));
+      }
+    }
+
+    void loadAttachments();
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, client, workspaceId, channelId]);
+
   const othersTyping = useMemo(
     () => [...typingUserIds].filter((id) => id !== currentUserId),
     [typingUserIds, currentUserId],
@@ -192,17 +254,21 @@ function ActiveChannelChat({
   );
 
   const uiMessages: Message[] = useMemo(
-    () => messages.map((m) => messageToUi(m, currentUserId)),
-    [messages, currentUserId],
+    () =>
+      messages.map((m) =>
+        messageToUi(m, currentUserId, attachmentsByMessage[m.id]),
+      ),
+    [messages, currentUserId, attachmentsByMessage],
   );
 
   const currentUser = useMemo(
-    () => profileToUiUser({
-      id: currentUserId,
-      email: "",
-      username: currentUsername,
-      created_at: "",
-    }),
+    () =>
+      profileToUiUser({
+        id: currentUserId,
+        email: "",
+        username: currentUsername,
+        created_at: "",
+      }),
     [currentUserId, currentUsername],
   );
 
@@ -223,14 +289,47 @@ function ActiveChannelChat({
     }, 1500);
   }
 
-  async function handleSend(text: string) {
-    if (connectionState === "connected" && connection) {
-      connection.stopTyping();
-      connection.sendMessage(text);
-      return;
+  async function handleSend(text: string, file?: File | null) {
+    if (connectionState === "connected") {
+      connection?.stopTyping();
     }
-    await client.messages.send(workspaceId, channelId, { content: text });
-    await refresh();
+
+    try {
+      if (file) {
+        const uploaded = await client.attachments.uploadFile(file, {
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+        });
+        const content = text || `(attachment: ${uploaded.file_name})`;
+        const message = await client.messages.send(workspaceId, channelId, {
+          content,
+        });
+        const attached = await client.attachments.attachToMessage(
+          workspaceId,
+          channelId,
+          message.id,
+          [uploaded],
+        );
+        loadedAttachmentIdsRef.current.add(message.id);
+        setAttachmentsByMessage((prev) => ({
+          ...prev,
+          [message.id]: attached,
+        }));
+        await refresh();
+        return;
+      }
+
+      if (!text) return;
+
+      if (connectionState === "connected" && connection) {
+        connection.sendMessage(text);
+        return;
+      }
+      await client.messages.send(workspaceId, channelId, { content: text });
+      await refresh();
+    } catch (err) {
+      setError(formatError(err));
+    }
   }
 
   return (
@@ -257,7 +356,7 @@ function ActiveChannelChat({
           currentUser={currentUser}
           selectedConversationId={String(channelId)}
           onConversationSelect={(id) => onSelectChannel(Number(id))}
-          onMessageSend={(text) => void handleSend(text)}
+          onMessageSend={(text, file) => void handleSend(text, file)}
           onInputChange={handleDraftChange}
           headerTitle="Channels"
           onlineLabel="In this channel"
@@ -265,13 +364,13 @@ function ActiveChannelChat({
           showReadReceipts={false}
           enableAudio={false}
           enableEmojis={false}
-          enableAttachments={false}
+          enableAttachments
           enableVoiceCall={false}
           enableVideoCall={false}
           placeholderText="Type a message…"
           colors={{
-            messageOwn: "bg-emerald-500 text-white",
-            messageOther: "bg-gray-100 text-gray-900",
+            messageOwn: "bg-accent text-surface",
+            messageOther: "bg-surface text-text border border-border",
           }}
         />
       </div>

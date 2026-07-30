@@ -1,8 +1,14 @@
-import type { Channel, MessageListItem, UserProfile } from "@brenox/sdk";
-import type { Conversation, Message, User } from "./types";
+import type { Attachment, Channel, MessageListItem, UserProfile } from "@brenox/sdk";
+import type { Conversation, Message, MessageAttachment, User } from "./types";
 
-export function avatarFor(seed: string): string {
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}`;
+export function initialsFromName(name: string): string {
+  const cleaned = name.replace(/^#/, "").trim();
+  if (!cleaned) return "?";
+  const parts = cleaned.split(/[\s._-]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
+  }
+  return cleaned.slice(0, 2).toUpperCase();
 }
 
 export function formatMessageTime(iso: string): string {
@@ -25,7 +31,7 @@ export function toUiUser(
   return {
     id: String(id),
     name: display,
-    avatar: avatarFor(display),
+    initials: initialsFromName(display),
     isOnline,
   };
 }
@@ -44,10 +50,11 @@ export function channelToConversation(
   },
 ): Conversation {
   const name = channel.Name || `Channel ${channel.ID}`;
+  const label = `#${name}`;
   return {
     id: String(channel.ID),
-    name: `#${name}`,
-    avatar: avatarFor(name),
+    name: label,
+    initials: initialsFromName(name),
     lastMessage: opts?.lastMessage ?? "No messages yet",
     timestamp: opts?.timestamp ?? "",
     isTyping: opts?.isTyping,
@@ -55,9 +62,23 @@ export function channelToConversation(
   };
 }
 
+export function toUiAttachments(
+  items: Attachment[] | undefined,
+): MessageAttachment[] | undefined {
+  if (!items?.length) return undefined;
+  return items.map((att) => ({
+    id: String(att.id),
+    fileName: att.file_name,
+    mimeType: att.mime_type,
+    sizeBytes: att.size_bytes,
+    url: att.url,
+  }));
+}
+
 export function messageToUi(
   message: MessageListItem,
   currentUserId: number,
+  attachments?: Attachment[],
 ): Message {
   const name = message.username || `User ${message.sender_id}`;
   return {
@@ -66,5 +87,6 @@ export function messageToUi(
     text: message.content,
     timestamp: formatMessageTime(message.created_at),
     isOwn: message.sender_id === currentUserId,
+    attachments: toUiAttachments(attachments),
   };
 }

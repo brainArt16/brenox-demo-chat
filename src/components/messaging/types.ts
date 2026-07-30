@@ -1,8 +1,18 @@
 export interface User {
   id: string;
   name: string;
-  avatar: string;
+  /** Optional legacy URL; UI uses initials instead. */
+  avatar?: string;
+  initials?: string;
   isOnline?: boolean;
+}
+
+export interface MessageAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string;
 }
 
 export interface Message {
@@ -15,12 +25,15 @@ export interface Message {
   audioLength?: string;
   isTyping?: boolean;
   readStatus?: "sent" | "delivered" | "read";
+  attachments?: MessageAttachment[];
 }
 
 export interface Conversation {
   id: string;
   name: string;
-  avatar: string;
+  /** Optional legacy URL; UI uses initials instead. */
+  avatar?: string;
+  initials?: string;
   lastMessage: string;
   timestamp: string;
   unread?: number;
@@ -45,7 +58,7 @@ export interface MessagingProps {
   currentUser?: User;
   selectedConversationId?: string;
   onConversationSelect?: (conversationId: string) => void;
-  onMessageSend?: (message: string) => void;
+  onMessageSend?: (message: string, file?: File | null) => void;
   onInputChange?: (value: string) => void;
   onOnlineUserClick?: (userId: string) => void;
   onVoiceCallInitiated?: (recipientId: string) => void;
@@ -89,7 +102,7 @@ export interface ChatAreaProps {
   currentConversation: Conversation | undefined;
   messages: Message[];
   currentUser?: User;
-  onMessageSend: (message: string) => void;
+  onMessageSend: (message: string, file?: File | null) => void;
   onInputChange?: (value: string) => void;
   onBack?: () => void;
   onVoiceCallInitiated?: (recipientId: string) => void;

@@ -145,15 +145,15 @@ function DemoApp() {
       />
 
       {viewMode === "widget" ? (
-        <main className="relative min-h-0 flex-1 bg-gradient-to-br from-slate-100 to-slate-200">
+        <main className="relative min-h-0 flex-1 bg-gradient-to-br from-surface to-surface-muted">
           <div className="mx-auto max-w-lg px-6 py-16 text-center">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-accent">
               Support widget preview
             </p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+            <h2 className="mt-2 text-2xl font-semibold text-text">
               Your product page
             </h2>
-            <p className="mt-3 text-sm text-slate-600">
+            <p className="mt-3 text-sm text-text-muted">
               This simulates a host app with a floating support chat button
               (bottom-right). Open it as {embedSession.personaLabel} — use
               another tab for the other persona to reply in realtime.
