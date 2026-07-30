@@ -24,7 +24,9 @@ npm run dev
 
 Open `http://localhost:5173/demos/chat/`. Click **Alice** in one browser tab and **Bob** in another to try realtime chat in `#general`.
 
-**Try a call:** Alice clicks **Start video** (or **Start voice**). Bob sees an incoming call banner and clicks **Join call**. Allow mic/camera when prompted.
+The UI is a **WhatsApp-style multi-chat** shell (channel sidebar + thread + typing/presence). Use the header toggle **Support widget** to preview a floating FAB + support dialog on a fake product page.
+
+**Try a call:** In **Full chat**, Alice clicks **Start video** (or **Start voice**) in the call bar. Bob sees an incoming call banner and clicks **Join call**. Allow mic/camera when prompted.
 
 > **Two terminals required:** Vite (`npm run dev`) only serves the UI. The embed API (`npm run dev:server`) must stay running on port 3001 — if it stops, you'll see proxy/`ECONNREFUSED` errors when opening a user.
 
@@ -52,11 +54,12 @@ Your chat UI (src/)          BrenoxClient + @brenox/react
 ## Features demonstrated
 
 - Embed session tokens (`POST /v1/sessions`)
+- WhatsApp-style multi-channel chat UI (reference UI in this demo; `@brenox/react` stays hooks-only)
+- Floating support-widget preview (FAB + single-thread dialog)
 - Live chat (REST history + WebSocket)
 - Voice & video calls (`useCallSignaling` + WebRTC mesh)
-- Typing indicators and channel events
+- Typing indicators and channel presence events
 - Notifications (`useNotifications`)
-- File attachments
 
 ## Build & deploy
 

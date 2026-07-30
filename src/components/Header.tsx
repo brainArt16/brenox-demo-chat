@@ -7,12 +7,16 @@ const STATE_STYLES: Record<ConnectionState, string> = {
   disconnected: "bg-text-muted/15 text-text-muted",
 };
 
+export type DemoViewMode = "full" | "widget";
+
 interface HeaderProps {
   username?: string;
   email?: string;
   connectionState?: ConnectionState;
   onLogout: () => void;
   logoutLabel?: string;
+  viewMode?: DemoViewMode;
+  onViewModeChange?: (mode: DemoViewMode) => void;
 }
 
 export function Header({
@@ -21,6 +25,8 @@ export function Header({
   connectionState,
   onLogout,
   logoutLabel = "Reset / Logout",
+  viewMode,
+  onViewModeChange,
 }: HeaderProps) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
@@ -43,6 +49,32 @@ export function Header({
       </div>
 
       <div className="flex flex-wrap items-center gap-3 text-sm">
+        {viewMode && onViewModeChange && (
+          <div className="flex rounded-md border border-border p-0.5">
+            <button
+              type="button"
+              onClick={() => onViewModeChange("full")}
+              className={`rounded px-2.5 py-1 text-xs font-medium ${
+                viewMode === "full"
+                  ? "bg-accent text-white"
+                  : "text-text-muted hover:bg-surface-muted"
+              }`}
+            >
+              Full chat
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewModeChange("widget")}
+              className={`rounded px-2.5 py-1 text-xs font-medium ${
+                viewMode === "widget"
+                  ? "bg-accent text-white"
+                  : "text-text-muted hover:bg-surface-muted"
+              }`}
+            >
+              Support widget
+            </button>
+          </div>
+        )}
         {connectionState && (
           <span
             className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${STATE_STYLES[connectionState]}`}

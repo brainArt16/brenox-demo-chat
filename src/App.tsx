@@ -2,14 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import type { ConnectionState, UserProfile } from "@brenox/sdk";
 import { BrenoxProvider, useBrenoxClient } from "@brenox/react";
 import { brenoxClient } from "./brenox/client";
-import { CallPanel } from "./components/CallPanel";
-import { ChatPanel } from "./components/ChatPanel";
+import { BrenoxMultiChat } from "./components/BrenoxMultiChat";
 import { EmbedLauncher } from "./components/EmbedLauncher";
-import { EmbedRoomBar } from "./components/EmbedRoomBar";
 import { Header } from "./components/Header";
 import { NotificationsPanel } from "./components/NotificationsPanel";
-import { ChannelSessionProvider } from "./context/channel-session";
+import { SupportFab } from "./components/SupportFab";
 import { formatError, isAuthFailure } from "./utils/errors";
+
+type ViewMode = "full" | "widget";
 
 interface EmbedSession {
   personaLabel: string;
@@ -27,6 +27,7 @@ function DemoApp() {
   const [launcherKey, setLauncherKey] = useState(0);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
+  const [viewMode, setViewMode] = useState<ViewMode>("full");
 
   const loadSession = useCallback(async () => {
     setBootstrapping(true);
@@ -78,6 +79,7 @@ function DemoApp() {
         channelId: input.channelId,
         channelName: input.channelName,
       });
+      setViewMode("full");
     } catch (err) {
       await client.auth.logout();
       setUser(null);
@@ -94,6 +96,7 @@ function DemoApp() {
     setEmbedSession(null);
     setConnectionState("disconnected");
     setAuthError(null);
+    setViewMode("full");
     setLauncherKey((value) => value + 1);
   }
 
@@ -137,33 +140,48 @@ function DemoApp() {
         connectionState={connectionState}
         onLogout={() => void handleSwitchUser()}
         logoutLabel="Switch user"
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <EmbedRoomBar
-          channelName={embedSession.channelName}
-          workspaceId={embedSession.workspaceId}
-          channelId={embedSession.channelId}
-          personaLabel={embedSession.personaLabel}
-        />
-
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <ChannelSessionProvider
+      {viewMode === "widget" ? (
+        <main className="relative min-h-0 flex-1 bg-gradient-to-br from-slate-100 to-slate-200">
+          <div className="mx-auto max-w-lg px-6 py-16 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+              Support widget preview
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+              Your product page
+            </h2>
+            <p className="mt-3 text-sm text-slate-600">
+              This simulates a host app with a floating support chat button
+              (bottom-right). Open it as {embedSession.personaLabel} — use
+              another tab for the other persona to reply in realtime.
+            </p>
+          </div>
+          <SupportFab
             workspaceId={embedSession.workspaceId}
             channelId={embedSession.channelId}
-          >
-            <CallPanel currentUserId={user.id} />
-            <ChatPanel
+            channelName={embedSession.channelName}
+            currentUserId={user.id}
+            currentUsername={user.username}
+            onConnectionStateChange={setConnectionState}
+          />
+        </main>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <BrenoxMultiChat
               workspaceId={embedSession.workspaceId}
-              channelId={embedSession.channelId}
+              initialChannelId={embedSession.channelId}
               currentUserId={user.id}
+              currentUsername={user.username}
               onConnectionStateChange={setConnectionState}
             />
-          </ChannelSessionProvider>
-        </main>
-
-        <NotificationsPanel />
-      </div>
+          </main>
+          <NotificationsPanel />
+        </div>
+      )}
     </div>
   );
 }
