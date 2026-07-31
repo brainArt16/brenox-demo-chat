@@ -1,6 +1,8 @@
 import { Check, CheckCheck, FileIcon, Paperclip } from "lucide-react";
+import type { MouseEvent } from "react";
+import { useAttachmentObjectUrl } from "../../lib/attachment-content";
 import { InitialsAvatar } from "./InitialsAvatar";
-import type { MessageBubbleProps } from "./types";
+import type { MessageAttachment, MessageBubbleProps } from "./types";
 
 const MAX_WIDTH: Record<NonNullable<MessageBubbleProps["maxWidth"]>, string> = {
   xs: "max-w-xs",
@@ -17,6 +19,69 @@ function formatBytes(bytes: number): string {
 
 function isImageMime(mime: string): boolean {
   return mime.startsWith("image/");
+}
+
+function AttachmentItem({
+  att,
+  isOwn,
+}: {
+  att: MessageAttachment;
+  isOwn: boolean;
+}) {
+  const { src, error, loading } = useAttachmentObjectUrl(att.url);
+
+  function openAttachment(event: MouseEvent) {
+    event.preventDefault();
+    if (!src) return;
+    window.open(src, "_blank", "noopener,noreferrer");
+  }
+
+  if (isImageMime(att.mimeType)) {
+    return (
+      <button
+        type="button"
+        onClick={openAttachment}
+        disabled={!src}
+        className="block w-full overflow-hidden rounded-xl border border-border text-left disabled:opacity-60"
+      >
+        {loading && !src && (
+          <div className="flex h-32 items-center justify-center bg-surface-muted text-xs text-text-muted">
+            Loading…
+          </div>
+        )}
+        {error && (
+          <div className="flex h-24 items-center justify-center bg-surface-muted px-3 text-xs text-danger">
+            {error}
+          </div>
+        )}
+        {src && (
+          <img
+            src={src}
+            alt={att.fileName}
+            className="max-h-56 w-full object-cover"
+          />
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={openAttachment}
+      disabled={!src}
+      className={`flex w-full items-center gap-2 rounded-xl border border-border px-3 py-2 text-left text-sm transition hover:border-accent/50 disabled:opacity-60 ${
+        isOwn ? "bg-accent/20 text-text" : "bg-surface-muted text-text"
+      }`}
+    >
+      <FileIcon size={16} className="flex-shrink-0 text-accent" />
+      <span className="min-w-0 flex-1 truncate">{att.fileName}</span>
+      <span className="flex-shrink-0 text-xs text-text-muted">
+        {loading ? "…" : error ? "!" : formatBytes(att.sizeBytes)}
+      </span>
+      <Paperclip size={14} className="flex-shrink-0 text-text-muted" />
+    </button>
+  );
 }
 
 export function MessageBubble({
@@ -65,41 +130,10 @@ export function MessageBubble({
         )}
 
         {attachments.length > 0 && (
-          <ul className={`mt-1.5 w-full space-y-1.5 ${message.text ? "" : ""}`}>
+          <ul className="mt-1.5 w-full space-y-1.5">
             {attachments.map((att) => (
               <li key={att.id}>
-                {isImageMime(att.mimeType) ? (
-                  <a
-                    href={att.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block overflow-hidden rounded-xl border border-border"
-                  >
-                    <img
-                      src={att.url}
-                      alt={att.fileName}
-                      className="max-h-56 w-full object-cover"
-                    />
-                  </a>
-                ) : (
-                  <a
-                    href={att.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm transition hover:border-accent/50 ${
-                      message.isOwn
-                        ? "bg-accent/20 text-text"
-                        : "bg-surface-muted text-text"
-                    }`}
-                  >
-                    <FileIcon size={16} className="flex-shrink-0 text-accent" />
-                    <span className="min-w-0 flex-1 truncate">{att.fileName}</span>
-                    <span className="flex-shrink-0 text-xs text-text-muted">
-                      {formatBytes(att.sizeBytes)}
-                    </span>
-                    <Paperclip size={14} className="flex-shrink-0 text-text-muted" />
-                  </a>
-                )}
+                <AttachmentItem att={att} isOwn={message.isOwn} />
               </li>
             ))}
           </ul>
